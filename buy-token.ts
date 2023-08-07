@@ -166,11 +166,10 @@ const approveTokenAndSlippage = async (
   );
 }
 
-const buyToken = async(isLoop = false) =>{
+const buyToken = async(amount = '0.05', lr = 0.8, isLoop = false) =>{
   try {
     const contract = '0x61f275c54577a66cf4e4ccc6D20CbE04d31ae889';
     const addr = '0xf9F689367990f981BCD267FB1A4c45f63B6Bd7b1';
-    const amount = '0.1'
   
     // ------- BUY --------
     const transaction = await approveTokenAndSlippage(
@@ -206,13 +205,13 @@ const buyToken = async(isLoop = false) =>{
   } catch (error) {
     // ----------NOTE: remove if no need
     console.log("🚀 ~ file: buy-token.ts:207 ~ buyToken ~ error:", error);
-    if(isLoop) return await buyToken();
+    if(isLoop) return await buyToken(String(Number(amount) * lr), lr, isLoop);
     throw error;
   }
 }
 
 (async () => {
-    const {trxReceip, addr,contract, amount} = await buyToken(false);
+    const {trxReceip, addr,contract, amount} = await buyToken('0.05', 0.8, true);
     if(!!trxReceip){
     const gasFee = Number(
       ethers.utils.formatEther(
