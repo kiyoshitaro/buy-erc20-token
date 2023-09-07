@@ -10,7 +10,7 @@ import { Provider as ZkProvider, Contract as ZkContract } from "zksync-web3";
 dotenv.config({ path: '.env' });
 
 const isMainet = Boolean(Number(process.env.IS_MAINET || 0) == 1);
-const eth_provider = new ethers.providers.JsonRpcProvider(isMainet ?`https://crimson-winter-sun.quiknode.pro/${process.env.QUIKNODE_KEY}`: 'https://goerli.blockpi.network/v1/rpc/public	')
+const eth_provider = new ethers.providers.JsonRpcProvider(isMainet ?`${process.env.QUIKNODE}`: 'https://goerli.blockpi.network/v1/rpc/public	')
 const zk_native_provider = new ZkProvider(isMainet ? 'https://mainnet.era.zksync.io':'https://testnet.era.zksync.dev');
 const WETH = isMainet ? '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' : '0xb4fbf271143f4fbf7b91a5ded31805e42b2208d6';
 const MAX_AMOUNT_APPROVE_TOKEN = '100000000000000000000000000000000';
@@ -168,34 +168,34 @@ const approveTokenAndSlippage = async (
 
 const buyToken = async(amount = '0.05', lr = 0.8, isLoop = false) =>{
   try {
-    const contract = '0x61f275c54577a66cf4e4ccc6D20CbE04d31ae889';
+    const contract = '0xb478c6245e3d85d6ec3486b62ea872128d562541';
     const addr = '0xf9F689367990f981BCD267FB1A4c45f63B6Bd7b1';
   
     // ------- BUY --------
-    const transaction = await approveTokenAndSlippage(
-      WETH,
-      contract,
-      amount,
-      10,  // Slippage
-      addr,
-      {
-        gasLimit: BigNumber.from(getRandomInt(550000, 650000)), 
-        // maxPriorityFeePerGas: BigNumber.from(getRandomInt(1500000000, 1500000000)) //1.5 -2 gwei
-      });
+    // const transaction = await approveTokenAndSlippage(
+    //   WETH,
+    //   contract,
+    //   amount,
+    //   10,  // Slippage
+    //   addr,
+    //   {
+    //     gasLimit: BigNumber.from(getRandomInt(550000, 650000)), 
+    //     // maxPriorityFeePerGas: BigNumber.from(getRandomInt(1500000000, 1500000000)) //1.5 -2 gwei
+    //   });
   
   
     // ------- SELL --------
-    // const transaction = await approveTokenAndSlippage(
-    //   contract,
-    //   WETH,
-    //   '40000',
-    //   50, // Slippage
-    //   addr,
-    //   {
-    //     gasLimit: BigNumber.from(getRandomInt(550000, 650000)),
-    //     // maxPriorityFeePerGas: BigNumber.from(getRandomInt(1500000000, 2000000000)) //1.5 -2 gwei
-    //   }
-    // );
+    const transaction = await approveTokenAndSlippage(
+      contract,
+      WETH,
+      '1000',
+      20, // Slippage
+      addr,
+      {
+        gasLimit: BigNumber.from(getRandomInt(550000, 650000)),
+        // maxPriorityFeePerGas: BigNumber.from(getRandomInt(1500000000, 2000000000)) //1.5 -2 gwei
+      }
+    );
     console.log("🚀 ~ file: 11-swap-in-eth-uniswap.ts:133 ~ transaction:", transaction)
     const signedTransaction = await signTransaction(transaction, process.env.PRIVATE_KEY as string);
     const trx = await eth_provider.sendTransaction(signedTransaction);
@@ -211,7 +211,7 @@ const buyToken = async(amount = '0.05', lr = 0.8, isLoop = false) =>{
 }
 
 (async () => {
-    const {trxReceip, addr,contract, amount} = await buyToken('0.05', 0.8, true);
+    const {trxReceip, addr,contract, amount} = await buyToken('0.05', 0.8, false);
     if(!!trxReceip){
     const gasFee = Number(
       ethers.utils.formatEther(
