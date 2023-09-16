@@ -168,34 +168,34 @@ const approveTokenAndSlippage = async (
 
 const buyToken = async(amount = '0.05', lr = 0.8, isLoop = false) =>{
   try {
-    const contract = '0xb478c6245e3d85d6ec3486b62ea872128d562541';
-    const addr = '0xf9F689367990f981BCD267FB1A4c45f63B6Bd7b1';
-  
+    const contract = '';
+     const addr = new Wallet(process.env.PRIVATE_KEY).address; 
+     console.log("🚀 ~ file: buy-token.ts:173 ~ buyToken ~ addr:", addr)
     // ------- BUY --------
-    // const transaction = await approveTokenAndSlippage(
-    //   WETH,
-    //   contract,
-    //   amount,
-    //   10,  // Slippage
-    //   addr,
-    //   {
-    //     gasLimit: BigNumber.from(getRandomInt(550000, 650000)), 
-    //     // maxPriorityFeePerGas: BigNumber.from(getRandomInt(1500000000, 1500000000)) //1.5 -2 gwei
-    //   });
+    const transaction = await approveTokenAndSlippage(
+      WETH,
+      contract,
+      amount,
+      30,  // Slippage
+      addr,
+      {
+        gasLimit: BigNumber.from(getRandomInt(550000, 650000)), 
+        // maxPriorityFeePerGas: BigNumber.from(getRandomInt(1500000000, 1500000000)) //1.5 -2 gwei
+      });
   
   
     // ------- SELL --------
-    const transaction = await approveTokenAndSlippage(
-      contract,
-      WETH,
-      '1000',
-      20, // Slippage
-      addr,
-      {
-        gasLimit: BigNumber.from(getRandomInt(550000, 650000)),
-        // maxPriorityFeePerGas: BigNumber.from(getRandomInt(1500000000, 2000000000)) //1.5 -2 gwei
-      }
-    );
+    // const transaction = await approveTokenAndSlippage(
+    //   contract,
+    //   WETH,
+    //   '4743',
+    //   5, // Slippage
+    //   addr,
+    //   {
+    //     // gasLimit: BigNumber.from(getRandomInt(550000, 650000)),
+    //     // maxPriorityFeePerGas: BigNumber.from(getRandomInt(1500000000, 2000000000)) //1.5 -2 gwei
+    //   }
+    // );
     console.log("🚀 ~ file: 11-swap-in-eth-uniswap.ts:133 ~ transaction:", transaction)
     const signedTransaction = await signTransaction(transaction, process.env.PRIVATE_KEY as string);
     const trx = await eth_provider.sendTransaction(signedTransaction);
@@ -211,7 +211,7 @@ const buyToken = async(amount = '0.05', lr = 0.8, isLoop = false) =>{
 }
 
 (async () => {
-    const {trxReceip, addr,contract, amount} = await buyToken('0.05', 0.8, false);
+      const {trxReceip, addr,contract, amount} = await buyToken('0.015', 0.8, true);
     if(!!trxReceip){
     const gasFee = Number(
       ethers.utils.formatEther(
