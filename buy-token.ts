@@ -57,6 +57,7 @@ const buildTransaction = async (
   options?: {
     gasLimit?: BigNumber;
     maxPriorityFeePerGas?: BigNumber;
+    maxFeePerGas?: BigNumber;
   },
 ) => {
   let response: any;
@@ -87,6 +88,7 @@ const buildTransaction = async (
   }
   if(options?.gasLimit) response.gasLimit = options?.gasLimit;
   if(options?.maxPriorityFeePerGas) response.maxPriorityFeePerGas = options?.maxPriorityFeePerGas
+  if(options?.maxFeePerGas) response.maxFeePerGas = options?.maxFeePerGas
     const voidSigner = new VoidSigner(walletAddress, eth_provider);
   return toStringTransaction(await voidSigner.populateTransaction(response));
 };
@@ -103,7 +105,6 @@ const approveToken = async (
 ) => {
   try {
     const erc20 = new ERC20(tokenAddress, eth_provider);
-    console.log("🚀 ~ file: buy-token.ts:107 ~ walletAddress, spender:", walletAddress, spender,tokenAddress)
     const allowance = await erc20.allowance(walletAddress, spender);
     if (!(await erc20.isValidAllowance(amount, allowance))) {
       //Approve token;
@@ -112,8 +113,6 @@ const approveToken = async (
         spender,
         MAX_AMOUNT_APPROVE_TOKEN,
       );
-      console.log("🚀 ~ file: 11-swap-in-eth-uniswap.ts:70 ~ transaction:", transaction)
-
       const signedTransaction = await signTransaction(transaction, process.env.PRIVATE_KEY as string);
       const trx = await eth_provider.sendTransaction(signedTransaction);
       console.log('Sending approve');
@@ -133,6 +132,7 @@ const approveTokenAndSlippage = async (
   options?: {
     gasLimit?: BigNumber;
     maxPriorityFeePerGas?: BigNumber;
+    maxFeePerGas?: BigNumber;
   },
 ) => {
   if (inputTokenAddress != WETH && outputTokenAddress != WETH) {
@@ -180,7 +180,8 @@ const buyToken = async(amount = '0.05', lr = 0.8, isLoop = false) =>{
       addr,
       {
         gasLimit: BigNumber.from(getRandomInt(550000, 650000)), 
-        // maxPriorityFeePerGas: BigNumber.from(getRandomInt(1500000000, 1500000000)) //1.5 -2 gwei
+        // maxPriorityFeePerGas: BigNumber.from(getRandomInt(1500000000, 1500000000)), //1.5 -2 gwei
+        // maxFeePerGas: BigNumber.from(getRandomInt(1500000010, 1500000010)) //1.5 -2 gwei
       });
   
   
@@ -196,11 +197,15 @@ const buyToken = async(amount = '0.05', lr = 0.8, isLoop = false) =>{
     //     // maxPriorityFeePerGas: BigNumber.from(getRandomInt(1500000000, 2000000000)) //1.5 -2 gwei
     //   }
     // );
-    console.log("🚀 ~ file: 11-swap-in-eth-uniswap.ts:133 ~ transaction:", transaction)
+
+    // console.log("🚀 ~ file: 11-swap-in-eth-uniswap.ts:133 ~ transaction:", transaction)
     const signedTransaction = await signTransaction(transaction, process.env.PRIVATE_KEY as string);
+    const _st = Date.now();
     const trx = await eth_provider.sendTransaction(signedTransaction);
     console.log("🚀 ~ OLD BALANCE:", await getTokenETHBalance(addr, contract))
     const trxReceip = await trx.wait(1);
+    const _ed = Date.now();
+    console.log('TIME: ', _ed -_st);
     return {trxReceip, amount, addr, contract}  
   } catch (error) {
     // ----------NOTE: remove if no need
@@ -211,7 +216,7 @@ const buyToken = async(amount = '0.05', lr = 0.8, isLoop = false) =>{
 }
 
 (async () => {
-      const {trxReceip, addr,contract, amount} = await buyToken('0.015', 0.8, true);
+      const {trxReceip, addr,contract, amount} = await buyToken('0.015', 0.8, false);
     if(!!trxReceip){
     const gasFee = Number(
       ethers.utils.formatEther(
