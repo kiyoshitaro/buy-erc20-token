@@ -20,7 +20,7 @@ const contract = new Contract(
 const autoSellShare = async(subjectAddress: string, retry: number = 0) =>{
   const currentTime = new Date().getTime();
   const endBiddingTime = await getBiddingTime(subjectAddress);
-  const _delay = endBiddingTime - currentTime+ 1001;
+  const _delay = endBiddingTime - currentTime + 1050;
   if(_delay <= 0){
     await sellShare(subjectAddress, retry)
   } else {
@@ -41,7 +41,7 @@ const sellShare = async(subjectAddress: string, retry: number = 0) =>{
       }
     );
     const trx = await sellShares.wait();
-    console.log("🚀 ~ file: trade-share.ts:45 ~ sellShare ~ sellShares:", trx.transactionHash,trx.gasUsed.mul(BigNumber.from(2500)).toString() );
+    console.log("🚀 ~ file: trade-share.ts:45 ~ sellShare ~ sellShares:", trx.transactionHash,Number(trx.gasUsed.mul(BigNumber.from(2500)).toString())/ (1000000000) );
   } catch (error) {
     console.log("🚀 ~ file: trade-share.ts:36 ~ sellShare ~ error:", error)
 
@@ -66,12 +66,13 @@ const sellShare = async(subjectAddress: string, retry: number = 0) =>{
 const autoBidShare = async(subjectAddress: string, price:number, times: number = 1) =>{
   const currentTime = new Date().getTime();
   const endBiddingTime = await getBiddingTime(subjectAddress);
-  setTimeout(() => bidShare(subjectAddress, price, times), endBiddingTime - currentTime - 16000);
+  setTimeout(() => bidShare(subjectAddress, price, times), endBiddingTime - currentTime - 18000);
 }
 const bidShare = async(subjectAddress: string, price:number, times: number = 1) =>{
   try {
     // const _price = ethers.utils.parseEther(String(price)).toHexString(); 
     const _t = await getRecommendBidPrice(subjectAddress, price);   
+    console.log("🚀 ~ file: trade-share.ts:75 ~ bidShare ~ _t:", _t)
     const _price = ethers.utils.parseEther(_t.toFixed(2)).toHexString();
     const transactionCount = await wallet.getTransactionCount();
     for(let i =0; i< times; i++){
@@ -129,12 +130,12 @@ const getListBidPrice = async (subjectAddress: string, defaultPrice = 1) => {
 }
 
 (async () => {
-  const subAddress = '0x88ac4089ea29679d38c7009c6e851cda8c67b272';
+  const subAddress = '0x89bd44a957c58afe76a4995a52579f01df34a74b';
   // await getBiddingTime(subAddress);
 
-  // console.log("============ List bits ============", await getListBidPrice(subAddress));
-  // await getSellPriceAfterFee(subAddress);
-  // console.log(await getRecommendBidPrice(subAddress));
+  console.log("============ List bits ============", await getListBidPrice(subAddress));
+  await getSellPriceAfterFee(subAddress);
+  console.log(await getRecommendBidPrice(subAddress));
 
   // await bidShare(subAddress, 1, 1);  
   // await sellShare(subAddress, 1);
@@ -146,4 +147,4 @@ const getListBidPrice = async (subjectAddress: string, defaultPrice = 1) => {
   // console.log("🚀 ~ file: trade-share.ts:96 ~ block:", new Date(block.timestamp*1000))
 })()
 
-// 0x09021769f6f64a011b5c537a23444632591ed4d6
+// 0x7af4c68b7d89a53f4dd47c9aea26dd90f673c03e
