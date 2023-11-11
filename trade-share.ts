@@ -7,6 +7,7 @@ dotenv.config({ path: '.env' });
 const BOOST_MIN_PRICE = 1.25;
 const STRONG_BOTS = [
   '0xf4ef66a43bdf743cf22c0da76d8510f04bfcf79c', //luckydjj88 
+  '0x5fb2ee869c31e94b098aaaf2351cd37a56d14d42', //unknown
 ];
 const CA = '0xFaD9Fb76EE13aBFe08F8B17d3898a19902b6f9FB';
 const chiliz_provider = new ethers.providers.StaticJsonRpcProvider(process.env.QUIKNODE_CHZ);
@@ -20,7 +21,7 @@ const contract = new Contract(
 const autoSellShare = async(subjectAddress: string, retry: number = 0) =>{
   const currentTime = new Date().getTime();
   const endBiddingTime = await getBiddingTime(subjectAddress);
-  const _delay = endBiddingTime - currentTime + 1050;
+  const _delay = endBiddingTime - currentTime + 1400;
   if(_delay <= 0){
     await sellShare(subjectAddress, retry)
   } else {
@@ -92,7 +93,7 @@ const getRecommendBidPrice = async (subjectAddress: string, defaultPrice = 1) =>
       subjectAddress,
     );
     const minPrice = (await getPoolInitialBuyPriceAfterFee(subjectAddress)) * BOOST_MIN_PRICE;
-    const _rank = result.length - Math.ceil(result.length / 2) - 1;
+    const _rank = result.length - Math.ceil(result.length / 2);
     return result.length <= 20 ? minPrice : Math.max(Number(formatEther(result[_rank].amount).toString()), minPrice);
   } catch (error) {
     return defaultPrice;
@@ -130,17 +131,17 @@ const getListBidPrice = async (subjectAddress: string, defaultPrice = 1) => {
 }
 
 (async () => {
-  const subAddress = '0x89bd44a957c58afe76a4995a52579f01df34a74b';
-  // await getBiddingTime(subAddress);
+  const subAddress = '0x96b797cd56d2d5a161b7e27f48af38cc63ed7a89';
 
-  console.log("============ List bits ============", await getListBidPrice(subAddress));
-  await getSellPriceAfterFee(subAddress);
-  console.log(await getRecommendBidPrice(subAddress));
+  // console.log("🚀 ~ file: trade-share.ts:136 ~ await getBiddingTime(subAddress):", new Date(await getBiddingTime(subAddress)))
+  // console.log("============ List bids ============", await getListBidPrice(subAddress));
+  // await getSellPriceAfterFee(subAddress);
+  // console.log(await getRecommendBidPrice(subAddress));
 
   // await bidShare(subAddress, 1, 1);  
   // await sellShare(subAddress, 1);
 
-  // await autoBidShare(subAddress, 1, 1);  
+  // await autoBidShare(subAddress, 1, 2);  
   // await autoSellShare(subAddress, 1);
 
   // const block = await chiliz_provider.getBlock(1)
