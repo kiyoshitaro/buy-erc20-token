@@ -11,6 +11,7 @@
     "zksync-web3": "^0.14.3"
   },
   "scripts": {
-    "buy": "ts-node buy-token.ts"
+    "buy": "ts-node buy-token.ts",
+    "trade-share": "ts-node trade-share.ts"
   }
 }

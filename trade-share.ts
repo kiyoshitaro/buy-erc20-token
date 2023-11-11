@@ -4,83 +4,146 @@ import * as dotenv from "dotenv";
 import { formatEther } from "ethers/lib/utils";
 dotenv.config({ path: '.env' });
 
-const fantechCA = '0xFaD9Fb76EE13aBFe08F8B17d3898a19902b6f9FB';
+const BOOST_MIN_PRICE = 1.25;
+const STRONG_BOTS = [
+  '0xf4ef66a43bdf743cf22c0da76d8510f04bfcf79c', //luckydjj88 
+];
+const CA = '0xFaD9Fb76EE13aBFe08F8B17d3898a19902b6f9FB';
 const chiliz_provider = new ethers.providers.StaticJsonRpcProvider(process.env.QUIKNODE_CHZ);
 const wallet = new Wallet(process.env.PRIVATE_KEY as string, chiliz_provider);
 const contract = new Contract(
-  fantechCA,
+  CA,
   abi,
   chiliz_provider,
 );
 
-const sellShare = async(subjectAddress: string, retry: number = 10) =>{
+const autoSellShare = async(subjectAddress: string, retry: number = 0) =>{
+  const currentTime = new Date().getTime();
+  const endBiddingTime = await getBiddingTime(subjectAddress);
+  const _delay = endBiddingTime - currentTime+ 1001;
+  if(_delay <= 0){
+    await sellShare(subjectAddress, retry)
+  } else {
+    setTimeout(() => sellShare(subjectAddress, retry), _delay);
+  }
+}
+
+const sellShare = async(subjectAddress: string, retry: number = 0) =>{
   console.log("🚀 ~ file: trade-share.ts:51 ~ sellShare ~ retry:", retry)
   try {
     const sellShares = await contract.connect(wallet).sellShares(
       subjectAddress,
       1,
       {
-        gasLimit: BigNumber.from(500000),
+        // gasLimit: BigNumber.from(500000),
         // maxPriorityFeePerGas: BigNumber.from(2510000000000), // 2500 gwei        
         // maxPriorityFeePerGas: 2510, //1.5 -2 gwei
       }
     );
     const trx = await sellShares.wait();
-    const gasFee = Number(
-      ethers.utils.formatEther(
-        trx.gasUsed.mul(trx.effectiveGasPrice),
-      ),
-    );
-    console.log("🚀 ~ file: trade-share.ts:45 ~ sellShare ~ sellShares:", trx.transactionHash,gasFee.toString() )
+    console.log("🚀 ~ file: trade-share.ts:45 ~ sellShare ~ sellShares:", trx.transactionHash,trx.gasUsed.mul(BigNumber.from(2500)).toString() );
   } catch (error) {
     console.log("🚀 ~ file: trade-share.ts:36 ~ sellShare ~ error:", error)
-    if(retry > 1){
+
+    // NOTE: prevent strong bot
+    const bidUsers = (await contract.getPoolInitialTops(
+      subjectAddress,
+    )).map((user: any)=>user.account);
+    for(const bot of STRONG_BOTS){
+      if(bidUsers.includes(bot)){
+        console.log("should't sell now, front-run!");
+        return;
+      }
+    }
+
+    if(retry >= 1){
       sellShare(subjectAddress, retry -1)
     }
   }
 }
 
-const bitShare = async(subjectAddress: string, price:number, times: number = 1) =>{
+
+const autoBidShare = async(subjectAddress: string, price:number, times: number = 1) =>{
+  const currentTime = new Date().getTime();
+  const endBiddingTime = await getBiddingTime(subjectAddress);
+  setTimeout(() => bidShare(subjectAddress, price, times), endBiddingTime - currentTime - 16000);
+}
+const bidShare = async(subjectAddress: string, price:number, times: number = 1) =>{
   try {
     // const _price = ethers.utils.parseEther(String(price)).toHexString(); 
-    const _t = await getBitPrice(subjectAddress, price);   
-    const _price = ethers.utils.parseEther(_t.toString()).toHexString();
+    const _t = await getRecommendBidPrice(subjectAddress, price);   
+    const _price = ethers.utils.parseEther(_t.toFixed(2)).toHexString();
     const transactionCount = await wallet.getTransactionCount();
     for(let i =0; i< times; i++){
       contract.connect(wallet).buyShares(
         subjectAddress,
-        {value: _price, gasLimit: 500000, nonce: transactionCount + i}
+        {value: _price, nonce: transactionCount + i}
       );
     }
   } catch (error) {
-    console.log("🚀 ~ file: trade-share.ts:64 ~ bitShare ~ error:", error)
+    console.log("🚀 ~ file: trade-share.ts:64 ~ bidShare ~ error:", error)
   }
 }
 
-const getBitPrice = async (subjectAddress: string, defaultPrice = 1) => {
+const getRecommendBidPrice = async (subjectAddress: string, defaultPrice = 1) => {
   try {
     const result = await contract.getPoolInitialTops(
       subjectAddress,
     );
-    const _rank = result.length - Math.ceil(result.length / 2) - 3;
-    return Number(formatEther(result[_rank].amount).toString());
+    const minPrice = (await getPoolInitialBuyPriceAfterFee(subjectAddress)) * BOOST_MIN_PRICE;
+    const _rank = result.length - Math.ceil(result.length / 2) - 1;
+    return result.length <= 20 ? minPrice : Math.max(Number(formatEther(result[_rank].amount).toString()), minPrice);
   } catch (error) {
     return defaultPrice;
   }
 }
 
+const getBiddingTime = async (subjectAddress: string) => {
+  const result = await contract.getBiddingTime(
+    subjectAddress,
+  );
+  return result.toNumber() * 1000;
+}
 
-const getSellPriceAfterFee = async (subjectAddress: string, defaultAmount = 1) => {
+
+const getPoolInitialBuyPriceAfterFee = async(subjectAddress: string) => {
+  const result = await contract.getPoolInitialBuyPriceAfterFee (
+    subjectAddress,
+  );
+  return Number(formatEther(result).toString())
+}
+
+const getSellPriceAfterFee = async (subjectAddress: string) => {
   const result = await contract.getSellPriceAfterFee(
     subjectAddress,
-    defaultAmount,
+    1,
   );
   console.log("🚀 ~ file: trade-share.ts:92 ~ getSellPriceAfterFee ~ result:", formatEther(result).toString())
 }
+
+const getListBidPrice = async (subjectAddress: string, defaultPrice = 1) => {
+  const result = await contract.getPoolInitialTops(
+    subjectAddress,
+  );
+  return result.map(res => `${res.account} - ${Number(formatEther(res.amount).toString())}`);
+}
+
 (async () => {
-  // await getSellPriceAfterFee('0x86e12538b27fd905de7cf0782f1c9e4e09dfa656');
-  await bitShare('0x86e12538b27fd905de7cf0782f1c9e4e09dfa656', 3, 1);  
-  // await sellShare('0x86e12538b27fd905de7cf0782f1c9e4e09dfa656',3);
+  const subAddress = '0x88ac4089ea29679d38c7009c6e851cda8c67b272';
+  // await getBiddingTime(subAddress);
+
+  // console.log("============ List bits ============", await getListBidPrice(subAddress));
+  // await getSellPriceAfterFee(subAddress);
+  // console.log(await getRecommendBidPrice(subAddress));
+
+  // await bidShare(subAddress, 1, 1);  
+  // await sellShare(subAddress, 1);
+
+  // await autoBidShare(subAddress, 1, 1);  
+  // await autoSellShare(subAddress, 1);
+
+  // const block = await chiliz_provider.getBlock(1)
+  // console.log("🚀 ~ file: trade-share.ts:96 ~ block:", new Date(block.timestamp*1000))
 })()
 
-// 0x158dfdd4847f2fc07b6e6d38d5d500e2e74a3fb2
+// 0x09021769f6f64a011b5c537a23444632591ed4d6
