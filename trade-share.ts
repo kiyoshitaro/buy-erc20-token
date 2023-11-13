@@ -5,7 +5,7 @@ import { formatEther } from "ethers/lib/utils";
 import { TransactionRequest } from "zksync-web3/build/src/types";
 dotenv.config({ path: '.env' });
 
-const BOOST_MIN_PRICE = 1.2;
+const BOOST_MIN_PRICE = 1.05;
 const STRONG_BOTS = [
   '0xf4ef66a43bdf743cf22c0da76d8510f04bfcf79c', //luckydjj88 
   '0x5fb2ee869c31e94b098aaaf2351cd37a56d14d42', //unknown
@@ -18,6 +18,122 @@ const contract = new Contract(
   abi,
   chiliz_provider,
 );
+
+
+const _buildAndSignSellTransaction = async (subAddress: string) => {
+  // const _price = ethers.utils.parseEther('1').toHexString();
+  // const buyShares = await contract.populateTransaction.buyShares(
+  //   subAddress,
+  //   {value: _price}
+  // );
+  const sellShares = await contract.populateTransaction.sellShares(
+    subAddress,
+    1,
+    {
+      // gasLimit: BigNumber.from(40000000000000),
+      gasPrice: BigNumber.from(2660000000000),
+    }
+);
+  const voidSigner = new VoidSigner(wallet.address, chiliz_provider);
+  const _data = await voidSigner.populateTransaction(sellShares);
+  // {
+  //   data: '0xb51d05340000000000000000000000004599be6df57341bd0cec978e62f18c09a839ab890000000000000000000000000000000000000000000000000000000000000001',
+  //   to: '0xFaD9Fb76EE13aBFe08F8B17d3898a19902b6f9FB',
+  //   gasPrice: BigNumber { _hex: '0x026b545ae800', _isBigNumber: true },
+  //   from: '0x5A78DDBb0C6fe763D45A2c3Ed882143e00d4fe48',
+  //   type: 0,
+  //   nonce: 762,
+  //   gasLimit: BigNumber { _hex: '0x01d6ba', _isBigNumber: true },
+  //   chainId: 88888
+  // }
+  // const data = toStringTransaction(_data);
+  // console.log("🚀 ~ file: trade-share.ts:160 ~ data:", data);
+  const signedTrx = await wallet.signTransaction(_data);
+  // const hash = await chiliz_provider.perform('sendTransaction', {
+  //   signedTrx,
+  // });
+  return signedTrx;
+}
+
+const autoTrade = async(subjectAddress: string) =>{
+  const currentTime = new Date().getTime();
+  const endBiddingTime = await getBiddingTime(subjectAddress);
+  setTimeout(async () => {
+    await bidShare(subjectAddress, 1, 1);
+    await autoSellSharev3(subjectAddress, endBiddingTime);
+  }, endBiddingTime - currentTime - 21000);
+}
+
+const autoSellSharev3 = async(subjectAddress: string, endBiddingTime: number) =>{
+  const currentTime = new Date().getTime();
+  const signSellTrx = await _buildAndSignSellTransaction(subjectAddress);
+  const _delay = endBiddingTime - currentTime - 1000;
+  if(_delay <= 0){
+    await sellSharev3(signSellTrx, endBiddingTime)
+  } else {
+    setTimeout(() => sellSharev3(subjectAddress, endBiddingTime), _delay);
+  }
+}
+
+const sellSharev3 = async(signSellTrx: string, endBiddingTime: number) =>{
+    let _previos = Date.now() - 1000;
+    let _count = 0;
+    while(true){
+      try {
+        if(Date.now() - _previos >= 1000){
+          _previos = Date.now(); 
+          _count += 1;
+          console.log("Run sell", _count);
+          const hash = await chiliz_provider.sendTransaction(signSellTrx);
+          console.log("🚀 ~ file: trade-share.ts:87 ~ sellSharev3 ~ hash:", hash)
+        }
+      } catch (error) {
+        console.log("🚀 ~ file: trade-share.ts:90 ~ sellSharev3 ~ error:", error)
+      } 
+      if(Date.now() - endBiddingTime >= 1650){
+        break;
+      }
+    }
+}
+
+const autoSellSharev2 = async(subjectAddress: string) =>{
+  const currentTime = new Date().getTime();
+  const endBiddingTime = await getBiddingTime(subjectAddress);
+  const _delay = endBiddingTime - currentTime + 1600;
+  if(_delay <= 0){
+    await sellShare(subjectAddress, endBiddingTime)
+  } else {
+    setTimeout(() => sellSharev2(subjectAddress, endBiddingTime), _delay);
+  }
+}
+
+const sellSharev2 = async(subjectAddress: string, endBiddingTime: number) =>{
+    let _previos = Date.now() - 30;
+    let _count = 0;
+    while(true){
+      try {
+        if(Date.now() - _previos >= 30){
+          _previos = Date.now(); 
+          _count += 1;
+          console.log("Run sell", _count);
+          contract.connect(wallet).sellShares(
+            subjectAddress,
+            1,
+            {
+              // gasLimit: BigNumber.from(500000),
+              gasPrice: BigNumber.from(2660000000000),
+            }
+          );    
+        }
+      } catch (error) {
+        console.log("🚀 ~ file: trade-share.ts:53 ~ sellSharev2 ~ error:", error)
+      } 
+      if(Date.now() - endBiddingTime >= 1650){
+        break;
+      }
+    }
+}
+
 
 const autoSellShare = async(subjectAddress: string, retry: number = 0) =>{
   const currentTime = new Date().getTime();
@@ -164,37 +280,14 @@ const getListBidPrice = async (subjectAddress: string, defaultPrice = 1) => {
   return result.map(res => `${res.account} - ${Number(formatEther(res.amount).toString())}`);
 }
 
-const sleep = (ms: number) => {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-let updatedNonceAt = Date.now();
-let nonce = 0;
-const updateNonce = async () => {
-  while (true) {
-    console.log("run");
-    try {
-      if (
-        updatedNonceAt + 1000 * 7 < Date.now()
-      ) {
-        nonce = await wallet.getTransactionCount();
-        console.log("🚀 ~ file: trade-share.ts:148 ~ updateNonce ~ nonce:", nonce)
-        updatedNonceAt = Date.now();
-        await sleep(5000);
-      }
-    } catch (e) {
-      console.log('Error get nonce2: ', e);
-    }
-  }
-}
-
 (async () => {
-  const subAddress = '0x71f0db8a29cdb04a69400dc061585070e673d4b2';
+  const subAddress = '0xe7dca53e16de0df1b81b9265348475abb5d54f91';
 
-  console.log("🚀 ~ file: trade-share.ts:136 ~ await getBiddingTime(subAddress):", new Date(await getBiddingTime(subAddress)))
-  console.log("============ List bids ============", await getListBidPrice(subAddress));
-  await getSellPriceAfterFee(subAddress);
-  // await getBuyPriceAfterFee(subAddress);
-  console.log(await getRecommendBidPrice(subAddress));
+  // console.log("🚀 ~ file: trade-share.ts:136 ~ await getBiddingTime(subAddress):", new Date(await getBiddingTime(subAddress)))
+  // console.log("============ List bids ============", await getListBidPrice(subAddress));
+  // await getSellPriceAfterFee(subAddress);
+  // // await getBuyPriceAfterFee(subAddress);
+  // console.log(await getRecommendBidPrice(subAddress));
 
   // await buyShare(subAddress);  
   // await bidShare(subAddress ,1 ,1);  
@@ -202,6 +295,10 @@ const updateNonce = async () => {
 
   // await autoBidShare(subAddress, 1, 1);  
   // await autoSellShare(subAddress, 1);
+  // await autoSellSharev2(subAddress);
+
+  // await autoTrade(subAddress);
+  await autoSellSharev3(subAddress, 0);
 
   // const transactionHash = '0x7fe152653415da8bd2c6d24e932da2bcfead4e48a9697dfa804a06b026a3ca0c';
   // const [transactions, transactionOrbiter] = await Promise.all([
@@ -225,42 +322,4 @@ const updateNonce = async () => {
   //   Number(latestBlock),
   // );
   // console.log("🚀 ~ file: trade-share.ts:170 ~ buyLogs:", buyLogs)
-
-
-  // const _price = ethers.utils.parseEther('1').toHexString();
-  // const response = await contract.populateTransaction.buyShares(
-  //   subAddress,
-  //   {value: _price}
-  // );
-  // response.gasLimit = BigNumber.from(40000000000000);
-  // response.gasPrice = BigNumber.from(2650000000000);
-  // console.log("🚀 ~ file: trade-share.ts:152 ~ response:", response)
-  // const voidSigner = new VoidSigner(wallet.address, chiliz_provider);
-  // const _data = await voidSigner.populateTransaction(response);
-  // console.log("🚀 ~ file: trade-share.ts:156 ~ _data:", _data)
-  // const data = toStringTransaction(_data);
-  // console.log("🚀 ~ file: trade-share.ts:160 ~ data:", data)
-
-  // const block = await chiliz_provider.getBlock(1)
-  // console.log("🚀 ~ file: trade-share.ts:96 ~ block:", new Date(block.timestamp*1000))
-
-
-  // updateNonce().then().catch();
-  // console.log("hrhrhr");
 })()
-
-
-const toStringTransaction = (
-  populatedTransaction: PopulatedTransaction | TransactionRequest,
-) => {
-  const transaction = { ...populatedTransaction };
-  Object.keys(transaction).forEach((key) => {
-    if (typeof transaction[key] === 'object') {
-      transaction[key] = populatedTransaction[key].toString();
-    }
-  });
-  return transaction;
-};
-
-
-// 0x65a9f921dc6184cbadce4f66cdbd6b05fafdd778
