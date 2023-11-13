@@ -12,6 +12,7 @@
   },
   "scripts": {
     "buy": "ts-node buy-token.ts",
-    "trade-share": "ts-node trade-share.ts"
+    "test": "ts-node trade-share.ts",    
+    "trade-share": "ts-node bot-trade.ts"
   }
 }
