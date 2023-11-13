@@ -5,7 +5,7 @@ import { formatEther } from "ethers/lib/utils";
 import { TransactionRequest } from "zksync-web3/build/src/types";
 dotenv.config({ path: '.env' });
 
-const BOOST_MIN_PRICE = 1.05;
+const BOOST_MIN_PRICE = 1.2;
 const STRONG_BOTS = [
   '0xf4ef66a43bdf743cf22c0da76d8510f04bfcf79c', //luckydjj88 
   '0x5fb2ee869c31e94b098aaaf2351cd37a56d14d42', //unknown
@@ -60,14 +60,16 @@ const autoTrade = async(subjectAddress: string) =>{
   const endBiddingTime = await getBiddingTime(subjectAddress);
   setTimeout(async () => {
     await bidShare(subjectAddress, 1, 1);
+    console.log('==== BID DONE ======');
     await autoSellSharev3(subjectAddress, endBiddingTime);
   }, endBiddingTime - currentTime - 21000);
 }
 
 const autoSellSharev3 = async(subjectAddress: string, endBiddingTime: number) =>{
+  console.log("Start sell");
   const currentTime = new Date().getTime();
   const signSellTrx = await _buildAndSignSellTransaction(subjectAddress);
-  const _delay = endBiddingTime - currentTime - 1000;
+  const _delay = endBiddingTime - currentTime + 1700;
   if(_delay <= 0){
     await sellSharev3(signSellTrx, endBiddingTime)
   } else {
@@ -188,6 +190,7 @@ const autoBidShare = async(subjectAddress: string, price:number, times: number =
   setTimeout(() => bidShare(subjectAddress, price, times), endBiddingTime - currentTime - 21000);
 }
 const bidShare = async(subjectAddress: string, price:number, times: number = 1) =>{
+  console.log("Start Bid");
   try {
     // const _price = ethers.utils.parseEther(String(price)).toHexString(); 
     const _t = await getRecommendBidPrice(subjectAddress, price);   
@@ -281,13 +284,13 @@ const getListBidPrice = async (subjectAddress: string, defaultPrice = 1) => {
 }
 
 (async () => {
-  const subAddress = '0xe7dca53e16de0df1b81b9265348475abb5d54f91';
+  const subAddress = '0x67d062fef2eaf5500c1fb9720f48830c51494ea8';
 
-  // console.log("🚀 ~ file: trade-share.ts:136 ~ await getBiddingTime(subAddress):", new Date(await getBiddingTime(subAddress)))
-  // console.log("============ List bids ============", await getListBidPrice(subAddress));
-  // await getSellPriceAfterFee(subAddress);
-  // // await getBuyPriceAfterFee(subAddress);
-  // console.log(await getRecommendBidPrice(subAddress));
+  console.log("🚀 ~ file: trade-share.ts:136 ~ await getBiddingTime(subAddress):", new Date(await getBiddingTime(subAddress)))
+  console.log("============ List bids ============", await getListBidPrice(subAddress));
+  await getSellPriceAfterFee(subAddress);
+  // await getBuyPriceAfterFee(subAddress);
+  console.log(await getRecommendBidPrice(subAddress));
 
   // await buyShare(subAddress);  
   // await bidShare(subAddress ,1 ,1);  
