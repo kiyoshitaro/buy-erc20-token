@@ -349,7 +349,7 @@ const getListBidPrice = async (subjectAddress: string, defaultPrice = 1) => {
   // await autoSellShare(subAddress, 1);
   // await autoSellSharev2(subAddress);
 
-  await autoTrade(subAddress, 7984355);
+  // await autoTrade(subAddress, 7984355);
   // await autoSellSharev3(subAddress, 0);  
   // await autoSellSharev4(subAddress, 0, 0);
 
