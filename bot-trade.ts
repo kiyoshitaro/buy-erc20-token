@@ -5,7 +5,7 @@ import { formatEther } from "ethers/lib/utils";
 import { TransactionRequest } from "zksync-web3/build/src/types";
 dotenv.config({ path: '.env' });
 
-const BOOST_MIN_PRICE = 1.15;
+const BOOST_MIN_PRICE = 1;
 const STRONG_BOTS = [
   '0xf4ef66a43bdf743cf22c0da76d8510f04bfcf79c', //luckydjj88 
   '0x5fb2ee869c31e94b098aaaf2351cd37a56d14d42', //unknown
@@ -58,7 +58,7 @@ const autoTrade = async (subjectAddress: string, endBidBlock: number) => {
     await bidShare(subjectAddress, 1, 1);
     console.log('==== BID DONE ======');
     await autoSellSharev4(subjectAddress, endBiddingTime, endBidBlock);
-  }, endBiddingTime - currentTime - 23000);
+  }, endBiddingTime - currentTime - 21000);
 }
 
 const autoSellSharev5 = async (subjectAddress: string, endBiddingTime: number, endBidBlock: number) => {
@@ -79,8 +79,8 @@ const autoSellSharev5 = async (subjectAddress: string, endBiddingTime: number, e
       console.log("Run sell");
       const hash = await chiliz_provider.sendTransaction(signSellTrx);
       console.log("🚀 ~ file: trade-share.ts:99 ~ setTimeout ~ hash:", hash)
-      await sleep(2500);
-      await chiliz_provider.sendTransaction(signSellTrx);
+      // await sleep(2500);
+      // await chiliz_provider.sendTransaction(signSellTrx);
     }, _delay);
   }
 }
@@ -117,8 +117,8 @@ const autoSellSharev4 = async (subjectAddress: string, endBiddingTime: number, e
       console.log("Run sell in block", currBlock);
       const hash = await chiliz_provider.sendTransaction(signSellTrx);
       console.log("🚀 ~ file: trade-share.ts:99 ~ setTimeout ~ hash:", hash)
-      await sleep(2500);
-      await chiliz_provider.sendTransaction(signSellTrx);
+      // await sleep(2500);
+      // await chiliz_provider.sendTransaction(signSellTrx);
     }, _delay);
   }
 }
@@ -201,7 +201,7 @@ const getListBidPrice = async (subjectAddress: string, defaultPrice = 1) => {
   }
 
 (async () => {
-  const subAddress = '0xb270a32d3bfd3329e95b17089142cea00e1bc608';
+  const subAddress = '0xbb636d952542c360096e9334da01ac8444644ff8';
 
   // console.log("🚀 ~ file: trade-share.ts:136 ~ await getBiddingTime(subAddress):", new Date(await getBiddingTime(subAddress)))
   // console.log("============ List bids ============", await getListBidPrice(subAddress));
@@ -209,10 +209,10 @@ const getListBidPrice = async (subjectAddress: string, defaultPrice = 1) => {
   // // await getBuyPriceAfterFee(subAddress);
   // console.log(await getRecommendBidPrice(subAddress));
 
-  await autoTrade(subAddress, 8010143 + 298);
+  await autoTrade(subAddress, 8095168 + 298);
   // await autoSellSharev4(subAddress, 0, 0);
 })()
 
-// 0x3229a4fe7f655a776393973bd28d83b06eb28b82 8009979
+// 0xdde0e8e11d9c57577b17208543d55f86dc186c35 8013766
 // 0x1bcfbb4e40f71a725d604f1f016f589e117dceb5 8003825
 // 0x2f0510666da29e9a05768df224f4db63fc87d44d
