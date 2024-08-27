@@ -6,13 +6,16 @@
     "tsconfig-paths": "4.1.1"
   },
   "dependencies": {
+    "@types/ws": "^8.5.10",
     "ethers": "5.7.2",
+    "socket.io-client": "^4.7.2",
     "web3": "^1.0.0-beta.34",
-    "zksync-web3": "^0.14.3"
+    "zksync-web3": "^0.14.3",
+    "zlib": "^1.0.5"
   },
   "scripts": {
     "buy": "ts-node buy-token.ts",
-    "test": "ts-node trade-share.ts",    
+    "test": "ts-node trade-share.ts",
     "trade-share": "ts-node bot-trade.ts"
   }
 }
