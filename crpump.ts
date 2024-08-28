@@ -1,4 +1,4 @@
-import io from "socket.io-client";
+import io, { Socket } from "socket.io-client";
 import axios from "axios";
 import * as solanaWeb3 from "@solana/web3.js";
 import { BN, web3 } from "@coral-xyz/anchor";
@@ -19,6 +19,7 @@ import {
 import { NATIVE_MINT } from "@solana/spl-token";
 import _ from "lodash";
 import { sleep } from "zksync-web3/build/src/utils";
+import { WebSocket } from "ws";
 dotenv.config({ path: path.join(__dirname, "./.env") });
 const isMainet = Boolean(Number(process.env.IS_MAINET || 0) == 1);
 
@@ -33,6 +34,21 @@ const GM_FUN_API_ENDPOINT = isMainet
 const creator = solanaWeb3.Keypair.fromSecretKey(
   bs58.decode(process.env.SOL_PK)
 );
+
+const getRound = async () => {
+  const response = await axios.get(
+    `${GM_FUN_API_ENDPOINT}/rounds?sort_field=round_index&sort_type=DESC&take=1&page=1&status=active`
+  );
+  const res = await axios.get(
+    `${GM_FUN_API_ENDPOINT}/rounds/${
+      response?.data?.data?.list[0]?.id
+    }/check-claim?address=${creator?.publicKey?.toString()}`
+  );
+  return {
+    deposited_amount: res?.data?.data?.deposited_amount,
+    allocation_amount: res?.data?.data?.allocation_amount,
+  };
+};
 const claim = async (tokenAddress: string) => {
   try {
     const response = await axios.post(`${GM_FUN_API_ENDPOINT}/coins/claimed`, {
@@ -63,7 +79,7 @@ const swap = async (
   amount: number
 ) => {
   try {
-    const slippage = [20, 100];
+    const slippage = [50, 100];
     const transaction = await cPContract.swapRaydiumV4(
       creator.publicKey,
       new PublicKey(poolAddress),
@@ -91,15 +107,18 @@ const handleSwap = async (
   maxretry = 5
 ) => {
   let retry = 0;
+  let balance = 0;
   while (true) {
     if (retry >= maxretry) return;
-    const balance = Number(
-      await getBalanceByTokenAddressOnSolana(
-        tokenAddress,
-        creator.publicKey.toString()
-      )
-    );
-    console.log("🚀 ~ autoClaimAndSell ~ balance:", balance);
+    if (balance === 0) {
+      balance = Number(
+        await getBalanceByTokenAddressOnSolana(
+          tokenAddress,
+          creator.publicKey.toString()
+        )
+      );
+      console.log("🚀 ~ autoClaimAndSell ~ balance:", balance);
+    }
     if (balance > 0) {
       try {
         await swap(tokenAddress, poolAddress, balance);
@@ -136,8 +155,8 @@ async function autoClaimAndSell(tokenAddress: string, poolAddress: string) {
   try {
     if (fs.existsSync(dataPath)) {
       fs.truncateSync(dataPath, 0);
-      fs.writeFileSync(dataPath, JSON.stringify({ tokenAddress, poolAddress }));
     }
+    fs.writeFileSync(dataPath, JSON.stringify({ tokenAddress, poolAddress }));
   } catch (error) {
     console.log(error);
   }
@@ -212,6 +231,54 @@ async function getTxnLogs() {
   }
   _unlockSyncing(latestSignature);
 }
+
+let socket: any;
+const loadSocket = () => {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    console.log(`🚀 CREATE NEW SOCKET CONNECTION : ${url}`);
+    let socket = io(url, {
+      transports: ["websocket"],
+    });
+    // socket.emit("ping");
+    // socket.on("pong", (payload: any) => {
+    //   console.log("🚀 PONG", payload);
+    // });
+    socket.on("createRaydiumV4Event", async (data: any) => {
+      await autoClaimAndSell(
+        data?.event_data?.token?.address,
+        data?.event_data?.token?.raydium_pool
+      );
+    });
+    socket.on("contributeEvent", (payload: any) => {
+      console.log(
+        "🚀 ~ socket.on ~ payload:",
+        payload?.event_name,
+        "------",
+        `${
+          payload?.event_data?.wallet_txn?.wallet_address ===
+          creator?.publicKey?.toString()
+            ? `\x1b[31m${payload?.event_data?.wallet_txn?.wallet_address}\x1b[0m`
+            : payload?.event_data?.wallet_txn?.wallet_address
+        }`,
+        ":",
+        payload?.event_data?.wallet_txn?.amount,
+        "SOL"
+      );
+    });
+    socket.on("close", (payload: any) => {
+      console.log("WebSocket closed");
+      setTimeout(() => {
+        loadSocket();
+      }, 500);
+    });
+    socket.on("disconnect", (payload: any) => {
+      console.log("WebSocket disconnect");
+      setTimeout(() => {
+        loadSocket();
+      }, 500);
+    });
+  }
+};
 // =======================================  MAIN ========================================
 // LISTEN ONCHAIN
 // (async () => {
@@ -228,43 +295,21 @@ async function getTxnLogs() {
 // SELF HANDLE
 (async () => {
   // TODO: read & write from file
-  const data = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+  let data;
+  if (fs.existsSync(dataPath)) {
+    data = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+  }
   console.log(data);
   // Parse the JSON string into an object
   const tokenAddress = data["tokenAddress"];
   const poolAddress = data["poolAddress"];
-  //   await handleclaim(tokenAddress);
-  //   await handleSwap(tokenAddress, poolAddress);
+  // await handleclaim(tokenAddress);
+  // await handleSwap(tokenAddress, poolAddress);
 })();
 
 // LISTEN SOCKET
 (async () => {
-  console.log(`🚀 URL : ${url}`);
-  const socket = io(url, {
-    transports: ["websocket"],
-  });
-  //   socket.emit("ping");
-  //   socket.on("pong", (payload: any) => {
-  //     console.log("🚀 PONG", payload);
-  //   });
-  socket.on("createRaydiumV4Event", async (data: any) => {
-    await autoClaimAndSell(
-      data?.event_data?.token?.address,
-      data?.event_data?.token?.raydium_pool
-    );
-  });
-  socket.on("contributeEvent", (payload: any) => {
-    console.log(
-      "🚀 ~ socket.on ~ payload:",
-      payload?.event_name,
-      "------",
-      payload?.event_data?.wallet_txn?.wallet_address
-    );
-  });
-  socket.on("close", (payload: any) => {
-    console.log("close");
-  });
-  socket.on("disconnect", (payload: any) => {
-    console.log("disconnect");
-  });
+  loadSocket();
+  // const t = await getRound();
+  // console.log("🚀 ~ t:", t);
 })();
