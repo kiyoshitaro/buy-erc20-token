@@ -16,9 +16,6 @@ import * as solanaWeb3 from "@solana/web3.js";
 import { CrowdPump } from "./crowdPump";
 dotenv.config({ path: path.join(__dirname, "../.env") });
 const isMainet = Boolean(Number(process.env.IS_MAINET || 0) == 1);
-export const PROGRAM_ID = isMainet
-  ? "gmFzEt99MUCbiQ9Cn1CvCQ8Yz1gphfY8xXyHUGofcf6"
-  : "BAyFv7aAtgXWcnj1MyMhLZset5QbdR6X9QbcLqZzgvDi";
 
 const sleep = (ms: number) => {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -273,7 +270,61 @@ export async function getParsedTransactionByTxHash(txHash: string, retry = 0) {
     return null;
   }
 }
+export const parseCreateRaydiumV4 = (events: any[]) => {
+  return events
+    .filter((event) => event?.name === "createRaydiumV4Event")
+    .map((event) => {
+      const data = event?.data;
+      return {
+        event_name: event.name,
+        version: data?.version,
+        config: data?.config?.toString(),
+        round: data?.round?.toString(),
+        operator: data?.operator?.toString(),
+        base_token: data?.baseToken?.toString(),
+        quote_token: data?.quoteToken?.toString(),
+        market: data?.market?.toString(),
+        amm: data?.amm?.toString(),
+        init_base_amount: data?.initBaseAmount?.toString(),
+        init_quote_amount: data?.initQuoteAmount?.toString(),
+        tx_hash: event?.signature?.toString(),
+        block_number: event.blockTime,
+      };
+    });
+};
 
+export const parseContribute = (events: any[]) => {
+  return events
+    .filter((event) => event?.name === "contributeEvent")
+    .map((event) => {
+      const data = event?.data;
+      return {
+        event_name: event.name,
+        version: data?.version,
+        config: data?.config?.toString(),
+        round: data?.round?.toString(),
+        round_index: data?.roundIndex?.toNumber(),
+        pool: data?.pool?.toString(),
+        mint: data?.mint?.toString(),
+        contribution: data?.contribution?.toString(),
+        contribution_index: data?.contributionIndex?.toString(),
+        user: data?.user?.toString(),
+        pool_sol_reserves: data?.poolSolReserves?.toString(),
+        round_total_sol_reserves: data?.roundTotalSolReserves?.toString(),
+        sol_amount: data?.solAmount?.toString(),
+        top_pool: data?.topPool?.toString(),
+        top_pool_sol_reserves: data?.topPoolSolReserves?.toString(),
+        is_flipped: data?.isFlipped,
+        end_time: data?.endTime?.toNumber(),
+        tx_hash: event?.signature?.toString(),
+        block_number: event.blockTime,
+      };
+    });
+};
+
+export const PROGRAM_ID = isMainet
+  ? "gmFzEt99MUCbiQ9Cn1CvCQ8Yz1gphfY8xXyHUGofcf6"
+  : "BAyFv7aAtgXWcnj1MyMhLZset5QbdR6X9QbcLqZzgvDi";
 const SEND_RPC_TRANSACTIONS = process.env.SOL_RPCS?.split(",") || [];
 const JUP_RPCS = SEND_RPC_TRANSACTIONS.map(
   (rpc) =>

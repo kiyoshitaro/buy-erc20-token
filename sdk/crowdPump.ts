@@ -16,6 +16,7 @@ import {
 } from "@raydium-io/raydium-sdk";
 import { formatAmmKeysById } from "./utils";
 import { ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { sleep } from "zksync-web3/build/src/utils";
 
 export const CONFIG_INDEX = 1;
 export const EXPO = 100_000;
@@ -168,5 +169,119 @@ export class CrowdPump {
     }
 
     return { finalIxs: innerTransactions[0].instructions };
+  }
+
+  async getTransactions(untilSignature?: string): Promise<{
+    data: Array<string[]>;
+    latestSignature?: string;
+  }> {
+    const signatures = await this._getProgramSignatures(untilSignature);
+    console.log(`Found ${signatures.length} signatures`);
+    return {
+      data: signatures.length ? await this._splitTransactions(signatures) : [],
+      latestSignature: signatures.length ? signatures[0] : untilSignature,
+    };
+  }
+
+  async getLatestTransaction(): Promise<string> {
+    const signatures = await this._getProgramSignatures();
+    return signatures.length ? signatures[0] : null;
+  }
+
+  private async _getProgramSignatures(
+    untilSignature?: string
+  ): Promise<string[]> {
+    const until = untilSignature ? untilSignature : null;
+    const confirmedSignatureInfo =
+      await this.connection.getSignaturesForAddress(
+        this.program.programId,
+        // @ts-ignore
+        { until: until },
+        "confirmed"
+      );
+    return confirmedSignatureInfo
+      .filter((item) => item.err == null)
+      .map((item) => item.signature);
+  }
+
+  private async _splitTransactions(
+    signatures: string[]
+  ): Promise<Array<string[]>> {
+    let batchSignatures: Array<string[]>;
+    if (signatures.length < 10) {
+      batchSignatures = [signatures];
+    } else {
+      batchSignatures = _.chunk(signatures, 10);
+    }
+
+    return batchSignatures;
+  }
+
+  public async parseTransactions(
+    signatures: string[]
+  ): Promise<anchor.web3.ParsedTransactionWithMeta[]> {
+    const transactions: anchor.web3.ParsedTransactionWithMeta[] = [];
+    while (true) {
+      try {
+        const batchTransactions = await this.connection.getParsedTransactions(
+          signatures,
+          {
+            commitment: "confirmed",
+            maxSupportedTransactionVersion: 2,
+          }
+        );
+        // @ts-ignore
+        transactions.push(...batchTransactions);
+        break;
+      } catch (e) {
+        console.error(e);
+        await sleep(1000);
+      }
+    }
+
+    return _.flatten(transactions);
+  }
+
+  parseEvent(transactionParsed: anchor.web3.ParsedTransactionWithMeta) {
+    const eventParser = new anchor.EventParser(
+      this.program.programId,
+      new anchor.BorshCoder(this.program.idl)
+    );
+    // @ts-ignore
+    const events = eventParser.parseLogs(transactionParsed.meta.logMessages);
+    const eventsData: any[] = [];
+    // @ts-ignore
+    for (const event of events) {
+      eventsData.push(event);
+    }
+    return eventsData.map((event) => {
+      return {
+        ...event,
+        blockTime: transactionParsed.blockTime,
+        signature: transactionParsed.transaction.signatures[0],
+      };
+    });
+  }
+
+  parseEvents(transactionsParsed: anchor.web3.ParsedTransactionWithMeta[]) {
+    const events = transactionsParsed.map((transactionParsed) => {
+      return this.parseEvent(transactionParsed);
+    });
+    return _.flatten(events);
+  }
+
+  async fetchRoundWithPubkey(
+    roundPubkey: string,
+    commitment: anchor.web3.Commitment = "confirmed"
+  ): Promise<anchor.IdlAccounts<GmFunType>["round"] | null> {
+    try {
+      return await this.program.account.round.fetch(
+        new anchor.web3.PublicKey(roundPubkey),
+        commitment
+      );
+    } catch (error) {
+      // return default null if config account has not been initialized
+    }
+    return null;
   }
 }
