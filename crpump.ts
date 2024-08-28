@@ -71,7 +71,8 @@ const swap = async (
       NATIVE_MINT,
       new BN(amount * 10 ** 6),
       slippage,
-      true
+      true,
+      false
     );
     const dataSend = await createAndSendV0Tx(creator, transaction.finalIxs);
     return dataSend;
@@ -123,7 +124,7 @@ const handleclaim = async (tokenAddress: string, retry = 5) => {
     } catch (error) {
       if (error.message.includes("Request failed with status code 400")) {
         console.log("Waiting for 0.5 seconds...");
-        sleep(500);
+        await sleep(100);
       }
       _retry += 1;
       console.log("🚀 ~ retry:CLAIM", _retry);
@@ -140,8 +141,8 @@ async function autoClaimAndSell(tokenAddress: string, poolAddress: string) {
   } catch (error) {
     console.log(error);
   }
-  await handleclaim(tokenAddress, 10);
-  await handleSwap(tokenAddress, poolAddress, 10);
+  await handleclaim(tokenAddress, 100);
+  await handleSwap(tokenAddress, poolAddress, 20);
 }
 
 let fromSignature: string;
@@ -213,57 +214,57 @@ async function getTxnLogs() {
 }
 // =======================================  MAIN ========================================
 // LISTEN ONCHAIN
-(async () => {
-  //   fromSignature =
-  //     "3Gay4c5ZNANjy5iG33Bn6CjsnCjvgoMJjtgGBWzaAE4ipT21Amc58oUMyWtv1qco2HLPUyk5VZjYo5iynhahCt3Q";
-  fromSignature = await cPContract.getLatestTransaction();
-  while (true) {
-    let t = await getTxnLogs();
-    if (t) return;
-    sleep(200);
-  }
-})();
+// (async () => {
+//   //   fromSignature =
+//   //     "3Gay4c5ZNANjy5iG33Bn6CjsnCjvgoMJjtgGBWzaAE4ipT21Amc58oUMyWtv1qco2HLPUyk5VZjYo5iynhahCt3Q";
+//   fromSignature = await cPContract.getLatestTransaction();
+//   while (true) {
+//     let t = await getTxnLogs();
+//     if (t) return;
+//     sleep(200);
+//   }
+// })();
 
 // SELF HANDLE
 (async () => {
   // TODO: read & write from file
-  const data = fs.readFileSync(dataPath, "utf8");
+  const data = JSON.parse(fs.readFileSync(dataPath, "utf8"));
   console.log(data);
   // Parse the JSON string into an object
-  const tokenAddress = "6oxMVKS43DSSqBxGj5R7ktiFjXGBkHfJ6yptXD6AvPBU";
-  const poolAddress = "PQ3pKowzpNS8ZUk7AwXPt32gLmLh2JQZksEVLdextCc";
-  await handleclaim(tokenAddress);
-  await handleSwap(tokenAddress, poolAddress);
+  const tokenAddress = data["tokenAddress"];
+  const poolAddress = data["poolAddress"];
+  //   await handleclaim(tokenAddress);
+  //   await handleSwap(tokenAddress, poolAddress);
 })();
 
 // LISTEN SOCKET
-// (async () => {
-//   console.log(`🚀 URL : ${url}`);
-//   const socket = io(url, {
-//     transports: ["websocket"],
-//   });
-//   //   socket.emit("ping");
-//   //   socket.on("pong", (payload: any) => {
-//   //     console.log("🚀 PONG", payload);
-//   //   });
-//   socket.on("createRaydiumV4Event", async (data: any) => {
-//     await autoClaimAndSell(
-//       data?.event_data?.token?.address,
-//       data?.event_data?.token?.raydium_pool
-//     );
-//   });
-//   socket.on("contributeEvent", (payload: any) => {
-//     console.log(
-//       "🚀 ~ socket.on ~ payload:",
-//       payload?.event_name,
-//       "------",
-//       payload?.event_data?.wallet_txn?.wallet_address
-//     );
-//   });
-//   socket.on("close", (payload: any) => {
-//     console.log("close");
-//   });
-//   socket.on("disconnect", (payload: any) => {
-//     console.log("disconnect");
-//   });
-// })();
+(async () => {
+  console.log(`🚀 URL : ${url}`);
+  const socket = io(url, {
+    transports: ["websocket"],
+  });
+  //   socket.emit("ping");
+  //   socket.on("pong", (payload: any) => {
+  //     console.log("🚀 PONG", payload);
+  //   });
+  socket.on("createRaydiumV4Event", async (data: any) => {
+    await autoClaimAndSell(
+      data?.event_data?.token?.address,
+      data?.event_data?.token?.raydium_pool
+    );
+  });
+  socket.on("contributeEvent", (payload: any) => {
+    console.log(
+      "🚀 ~ socket.on ~ payload:",
+      payload?.event_name,
+      "------",
+      payload?.event_data?.wallet_txn?.wallet_address
+    );
+  });
+  socket.on("close", (payload: any) => {
+    console.log("close");
+  });
+  socket.on("disconnect", (payload: any) => {
+    console.log("disconnect");
+  });
+})();
