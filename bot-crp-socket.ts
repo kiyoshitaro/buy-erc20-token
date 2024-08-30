@@ -12,13 +12,10 @@ import {
   cPContract,
   createAndSendV0Tx,
   getBalanceByTokenAddressOnSolana,
-  parseContribute,
-  parseCreateRaydiumV4,
   sendTransaction,
 } from "./sdk/utils";
 import { NATIVE_MINT } from "@solana/spl-token";
 import _ from "lodash";
-import { sleep } from "zksync-web3/build/src/utils";
 import { WebSocket } from "ws";
 dotenv.config({ path: path.join(__dirname, "./.env") });
 const isMainet = Boolean(Number(process.env.IS_MAINET || 0) == 1);
@@ -33,6 +30,46 @@ const creator = solanaWeb3.Keypair.fromSecretKey(
   bs58.decode(process.env.SOL_PK)
 );
 
+let globalState = {
+  balance: undefined,
+  allocation_amount: undefined,
+  deposited_amount: undefined,
+  symbol: undefined,
+  tokenAddress: undefined,
+  poolAddress: undefined,
+};
+
+const truncateGlobalState = (data?: any) => {
+  globalState = {
+    balance: undefined,
+    allocation_amount: undefined,
+    deposited_amount: undefined,
+    symbol: undefined,
+    tokenAddress: undefined,
+    poolAddress: undefined,
+  };
+};
+const saveGlobalState = (data?: any) => {
+  try {
+    if (fs.existsSync(dataPath)) {
+      fs.truncateSync(dataPath, 0);
+    }
+    globalState = { ...globalState, ...data };
+    fs.writeFileSync(dataPath, JSON.stringify(globalState));
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+const loadGlobalState = () => {
+  let data: any = {};
+  if (fs.existsSync(dataPath)) {
+    data = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+  }
+  console.log("LOAD GLOBAL", data);
+  return data;
+};
+
 const getCoins = async (tokenAddress: string) => {
   const res = await axios.get(
     `${GM_FUN_API_ENDPOINT}/coins/${tokenAddress}?address=${creator?.publicKey?.toString()}`
@@ -43,13 +80,12 @@ const getCoins = async (tokenAddress: string) => {
     allocation_amount: res?.data?.data?.allocation_amount,
   };
 };
-let balance;
 const handleGetBalance = async (tokenAddress: string) => {
   while (true) {
     try {
       const res = await getCoins(tokenAddress);
-      console.log("🚀 ~ handleGetBalance ~ res:", res);
       if (res?.allocation_amount) {
+        saveGlobalState(res);
         return res?.allocation_amount;
       }
     } catch (error) {
@@ -58,7 +94,7 @@ const handleGetBalance = async (tokenAddress: string) => {
   }
 };
 
-const getSignature = async (tokenAddress: string) => {
+const getClaimSignature = async (tokenAddress: string) => {
   let response;
   while (true) {
     try {
@@ -74,7 +110,7 @@ const getSignature = async (tokenAddress: string) => {
         break;
       }
     } catch (error) {
-      console.log("getSignature ====> ", error.message);
+      console.log("getClaimSignature ====> ", error.message);
     }
   }
   const rawTx = web3.Transaction.from(Buffer.from(response, "base64"));
@@ -83,14 +119,6 @@ const getSignature = async (tokenAddress: string) => {
 };
 const claim = async (rawTx: any) => {
   try {
-    // const response = await axios.post(`${GM_FUN_API_ENDPOINT}/coins/claimed`, {
-    //   token_address: tokenAddress,
-    //   wallet_address: creator.publicKey.toString(),
-    // });
-    // const rawTx = web3.Transaction.from(
-    //   Buffer.from(response?.data?.data, "base64")
-    // );
-    // rawTx.partialSign(creator);
     const txHash = await sendTransaction(rawTx.serialize().toString("base64"));
     console.log("Transaction hash:", txHash);
     return {
@@ -102,13 +130,13 @@ const claim = async (rawTx: any) => {
     throw e;
   }
 };
-const swap = async (
+const getSwapSignature = async (
   tokenAddress: string,
   poolAddress: string,
   amount: number
 ) => {
-  try {
-    const slippage = [50, 100];
+  const slippage = [50, 100];
+  while (true) {
     const transaction = await cPContract.swapRaydiumV4(
       creator.publicKey,
       new PublicKey(poolAddress),
@@ -119,7 +147,14 @@ const swap = async (
       true,
       false
     );
-    const dataSend = await createAndSendV0Tx(creator, transaction.finalIxs);
+    if (transaction.finalIxs) {
+      return transaction.finalIxs;
+    }
+  }
+};
+const swap = async (instruction: anchor.web3.TransactionInstruction[]) => {
+  try {
+    const dataSend = await createAndSendV0Tx(creator, instruction);
     return dataSend;
   } catch (e) {
     console.log("🚀 ~ file: swap ~ e", e.message);
@@ -132,22 +167,30 @@ const handleSwap = async (
   maxretry = 5
 ) => {
   let retry = 0;
-  console.log("balance from claim", balance);
-  // let balance = 0;
+  console.log("balance from API", globalState?.allocation_amount);
   while (true) {
     if (retry >= maxretry) return;
-    if (!balance) {
-      balance = Number(
+    if (!globalState?.allocation_amount) {
+      const _bl = Number(
         await getBalanceByTokenAddressOnSolana(
           tokenAddress,
           creator.publicKey.toString()
         )
       );
-      console.log("🚀 ~ autoClaimAndSell ~ balance:", balance);
+      saveGlobalState({ allocation_amount: _bl });
+      console.log(
+        "🚀 ~ balance from CONTRACT:",
+        globalState?.allocation_amount
+      );
     }
-    if (balance > 0) {
+    if (globalState.allocation_amount > 0) {
+      const instruction = await getSwapSignature(
+        tokenAddress,
+        poolAddress,
+        globalState.allocation_amount
+      );
       try {
-        await swap(tokenAddress, poolAddress, balance);
+        await swap(instruction);
         console.log("======== SWAP SUCCESS =======");
         return;
       } catch (error) {
@@ -157,8 +200,9 @@ const handleSwap = async (
     }
   }
 };
+
 const handleclaim = async (tokenAddress: string, retry = 5) => {
-  const rawTx = await getSignature(tokenAddress);
+  const rawTx = await getClaimSignature(tokenAddress);
   let _retry = 0;
   while (true) {
     if (_retry >= retry) return;
@@ -167,93 +211,15 @@ const handleclaim = async (tokenAddress: string, retry = 5) => {
       console.log("======== CLAIM SUCCESS =======");
       return;
     } catch (error) {
-      if (error.message.includes("Request failed with status code 400")) {
-        console.log("Waiting for 0.5 seconds...");
-        await sleep(100);
-      }
       _retry += 1;
       console.log(_retry, "🚀 ~ retry:CLAIM:", error.message);
     }
   }
 };
 async function autoClaimAndSell(tokenAddress: string, poolAddress: string) {
-  console.log("🚀 ~ ++++++++++++++++++++++", tokenAddress, poolAddress);
-  try {
-    if (fs.existsSync(dataPath)) {
-      fs.truncateSync(dataPath, 0);
-    }
-    fs.writeFileSync(dataPath, JSON.stringify({ tokenAddress, poolAddress }));
-  } catch (error) {
-    console.log(error);
-  }
+  saveGlobalState({ tokenAddress, poolAddress });
   await handleclaim(tokenAddress, 100);
   await handleSwap(tokenAddress, poolAddress, 20);
-}
-let fromSignature: string;
-let isRunning = false;
-const _checkSyncing = () => {
-  return isRunning;
-};
-const _lockSyncing = () => {
-  isRunning = true;
-};
-const _unlockSyncing = (latestSignature: string) => {
-  isRunning = false;
-  if (latestSignature && latestSignature !== fromSignature) {
-    fromSignature = latestSignature;
-  }
-};
-async function getTxnLogs() {
-  if (_checkSyncing()) {
-    console.log("======= Syncing is in progress ... =======");
-    return;
-  }
-  _lockSyncing();
-  let latestSignature;
-  try {
-    const { data: signatures, latestSignature: _latestSignature } =
-      await cPContract.getTransactions(fromSignature);
-    latestSignature = _latestSignature;
-    if (latestSignature !== fromSignature) {
-      const rs = [];
-      for (const signature of signatures) {
-        const transactions = await cPContract.parseTransactions(signature);
-        const transaction_push = [];
-        for (const transaction of transactions) {
-          if (!transaction?.meta?.err) transaction_push.push(transaction);
-        }
-        rs.push(transaction_push);
-      }
-      const events = cPContract.parseEvents(_.flatten(rs)).reverse();
-      console.log(
-        `🚀 ~ SyncSMCService ~ getTxnLogs : FROM ${fromSignature} ---> ${latestSignature} : ${events.length}`
-      );
-      const logsParseContribute = parseContribute(events);
-      const logsCreateRaydiumPool = parseCreateRaydiumV4(events);
-      if (logsParseContribute.length > 0) {
-        console.log(
-          "CONTRIBUTE: ",
-          logsParseContribute.map(
-            (dt) => `${dt?.user} ------- ${dt?.sol_amount / 10 ** 9} SOL`
-          )
-        );
-      }
-      if (logsCreateRaydiumPool.length > 0) {
-        const roundData = await cPContract.fetchRoundWithPubkey(
-          logsCreateRaydiumPool[0]?.round
-        );
-        console.log("ROUND: ------> ", roundData?.index.toString());
-        await autoClaimAndSell(
-          roundData?.topMint.toString(),
-          logsCreateRaydiumPool[0]?.amm
-        );
-        return true;
-      }
-    }
-  } catch (error) {
-    console.log("🚀 ~ SyncSMCService ~ getTxnLogs ~ error:", error);
-  }
-  _unlockSyncing(latestSignature);
 }
 let socket: any;
 const loadSocket = () => {
@@ -272,11 +238,13 @@ const loadSocket = () => {
         data?.event_data?.token?.address,
         data?.event_data?.token?.raydium_pool
       );
+      saveGlobalState();
     });
     socket.on("creatingRaydiumPool", async (data: any) => {
-      balance = await handleGetBalance(data?.event_data?.winner?.address);
+      await handleGetBalance(data?.event_data?.winner?.address);
     });
     socket.on("contributeEvent", (payload: any) => {
+      //   truncateGlobalState();
       console.log(
         "🚀 ~ socket.on ~ payload:",
         payload?.event_name,
@@ -292,12 +260,12 @@ const loadSocket = () => {
         "SOL"
       );
     });
-    socket.on("close", (payload: any) => {
-      console.log("WebSocket closed");
-      setTimeout(() => {
-        loadSocket();
-      }, 500);
-    });
+    // socket.on("close", (payload: any) => {
+    //   console.log("WebSocket closed");
+    //   setTimeout(() => {
+    //     loadSocket();
+    //   }, 500);
+    // });
     socket.on("disconnect", (payload: any) => {
       console.log("WebSocket disconnect");
       setTimeout(() => {
@@ -307,30 +275,11 @@ const loadSocket = () => {
   }
 };
 // =======================================  MAIN ========================================
-// LISTEN ONCHAIN
-// (async () => {
-//   //   fromSignature =
-//   //     "3Gay4c5ZNANjy5iG33Bn6CjsnCjvgoMJjtgGBWzaAE4ipT21Amc58oUMyWtv1qco2HLPUyk5VZjYo5iynhahCt3Q";
-//   fromSignature = await cPContract.getLatestTransaction();
-//   while (true) {
-//     let t = await getTxnLogs();
-//     if (t) return;
-//     sleep(200);
-//   }
-// })();
 // SELF HANDLE
 (async () => {
-  // TODO: read & write from file
-  let data;
-  if (fs.existsSync(dataPath)) {
-    data = JSON.parse(fs.readFileSync(dataPath, "utf8"));
-    console.log(data);
-    // Parse the JSON string into an object
-    const tokenAddress = data["tokenAddress"];
-    const poolAddress = data["poolAddress"];
-    // await handleclaim(tokenAddress);
-    // await handleSwap(tokenAddress, poolAddress);
-  }
+  const data = loadGlobalState();
+  // await handleclaim(data?.tokenAddress);
+  await handleSwap(data?.tokenAddress, data?.poolAddress);
 })();
 // LISTEN SOCKET
 (async () => {
