@@ -16,7 +16,7 @@ import {
 } from "./sdk/utils";
 import { NATIVE_MINT } from "@solana/spl-token";
 import _ from "lodash";
-import { WebSocket } from "ws";
+import WebSocket from "ws";
 dotenv.config({ path: path.join(__dirname, "./.env") });
 const isMainet = Boolean(Number(process.env.IS_MAINET || 0) == 1);
 const dataPath = "data.json";
@@ -31,6 +31,7 @@ const creator = solanaWeb3.Keypair.fromSecretKey(
 );
 
 let globalState = {
+  round: undefined,
   balance: undefined,
   allocation_amount: undefined,
   deposited_amount: undefined,
@@ -41,6 +42,7 @@ let globalState = {
 
 const truncateGlobalState = (data?: any) => {
   globalState = {
+    round: undefined,
     balance: undefined,
     allocation_amount: undefined,
     deposited_amount: undefined,
@@ -51,9 +53,9 @@ const truncateGlobalState = (data?: any) => {
 };
 const saveGlobalState = (data?: any) => {
   try {
-    if (fs.existsSync(dataPath)) {
-      fs.truncateSync(dataPath, 0);
-    }
+    // if (fs.existsSync(dataPath)) {
+    //   fs.truncateSync(dataPath, 0);
+    // }
     globalState = { ...globalState, ...data };
     fs.writeFileSync(dataPath, JSON.stringify(globalState));
   } catch (error) {
@@ -167,7 +169,7 @@ const handleSwap = async (
   maxretry = 5
 ) => {
   let retry = 0;
-  console.log("balance from API", globalState?.allocation_amount);
+  console.log("balance from API", globalState?.allocation_amount, poolAddress);
   while (true) {
     if (retry >= maxretry) return;
     if (!globalState?.allocation_amount) {
@@ -234,6 +236,11 @@ const loadSocket = () => {
     //   console.log("🚀 PONG", payload);
     // });
     socket.on("createRaydiumV4Event", async (data: any) => {
+      console.log(
+        data?.event_data?.token?.address,
+        "-------",
+        data?.event_data?.token?.raydium_pool
+      );
       await autoClaimAndSell(
         data?.event_data?.token?.address,
         data?.event_data?.token?.raydium_pool
@@ -243,8 +250,15 @@ const loadSocket = () => {
     socket.on("creatingRaydiumPool", async (data: any) => {
       await handleGetBalance(data?.event_data?.winner?.address);
     });
+    socket.on("newRoundEvent", async (data: any) => {
+      console.log(
+        `========== START NEW ROUND ${data?.event_data?.round?.round_index}============`
+      );
+      saveGlobalState({
+        round: data?.event_data?.round?.round_index,
+      });
+    });
     socket.on("contributeEvent", (payload: any) => {
-      //   truncateGlobalState();
       console.log(
         "🚀 ~ socket.on ~ payload:",
         payload?.event_name,
@@ -259,6 +273,17 @@ const loadSocket = () => {
         payload?.event_data?.wallet_txn?.amount,
         "SOL"
       );
+      if (
+        payload?.event_data?.wallet_txn?.wallet_address ===
+        creator?.publicKey?.toString()
+      ) {
+        saveGlobalState({
+        //   myContributes: globalState?.myContributes.push(
+        //     payload?.event_data?.wallet_txn?.amount
+        //   ),
+          allocation_amount: undefined,
+        });
+      }
     });
     // socket.on("close", (payload: any) => {
     //   console.log("WebSocket closed");
@@ -277,9 +302,9 @@ const loadSocket = () => {
 // =======================================  MAIN ========================================
 // SELF HANDLE
 (async () => {
-  const data = loadGlobalState();
-  // await handleclaim(data?.tokenAddress);
-  await handleSwap(data?.tokenAddress, data?.poolAddress);
+  //   const data = loadGlobalState();
+  //   // await handleclaim(data?.tokenAddress);
+  //   await handleSwap(data?.tokenAddress, data?.poolAddress);
 })();
 // LISTEN SOCKET
 (async () => {
