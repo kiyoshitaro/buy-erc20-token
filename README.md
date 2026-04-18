@@ -1,4 +1,4 @@
-# StarsLeague Trading Bot - Phân Tích Chi Tiết
+# Trading Bot
 
 ## 📋 Mục Lục
 1. [Cơ Chế Đấu Giá (Auction Mechanics)](#cơ-chế-đấu-giá)
@@ -22,7 +22,7 @@ Mỗi pool (chủ thể) có:
 
 #### **Giai đoạn 1: Initial Bidding (Đấu giá ban đầu)**
 - Thời gian: `block.timestamp` <= `endTimeBid`
-- Chức năng: [`_bidShares()`](StarsLeague.sol#L775)
+- Chức năng: [`_bidShares()`](auction.sol#L775)
 - Cơ chế:
   - User gửi ETH với hàm `buyShares()` (không cần chỉ định giá)
   - Amount = `msg.value` (số ETH gửi)
@@ -42,7 +42,7 @@ Bid list: [10 ETH, 9.5 ETH, 9 ETH, ..., 1 ETH]
 
 #### **Giai đoạn 2: Normal Trading (Sau đấu giá)**
 - Thời gian: `block.timestamp` > `endTimeBid`
-- Chức năng: [`_buyShares()`](StarsLeague.sol#L856) và [`sellShares()`](StarsLeague.sol#L302)
+- Chức năng: [`_buyShares()`](auction.sol#L856) và [`sellShares()`](auction.sol#L302)
 - Cơ chế:
   - Mua: Giá theo **bonding curve** (cubic polynomial)
     ```
